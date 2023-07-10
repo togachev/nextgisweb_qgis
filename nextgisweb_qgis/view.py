@@ -37,6 +37,7 @@ def setup_pyramid(comp, config):
 
     @resource_sections(priority=40, template='nextgisweb_qgis:template/default_style.mako')
     def resource_section_default_style(obj):
-        return comp.options['default_style'] and len(obj.children) == 0 and (
-            QgisRasterStyle.check_parent(obj) or QgisVectorStyle.check_parent(obj)
-        )
+        if obj.cls != 'nogeom_layer':
+            return comp.options['default_style'] and len(obj.children) == 0 and (
+                QgisRasterStyle.check_parent(obj) or QgisVectorStyle.check_parent(obj)
+            )
