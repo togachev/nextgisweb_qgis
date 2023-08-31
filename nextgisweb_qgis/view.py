@@ -10,13 +10,13 @@ from .model import QgisRasterStyle, QgisVectorStyle
 class VectorStyleWidget(Widget):
     resource = QgisVectorStyle
     operation = ('create', 'update')
-    amdmod = 'ngw-qgis/VectorStyleWidget'
+    amdmod = '@nextgisweb/qgis/vector-editor-widget'
 
 
 class RasterStyleWidget(Widget):
     resource = QgisRasterStyle
     operation = ('create', 'update')
-    amdmod = 'ngw-qgis/RasterStyleWidget'
+    amdmod = '@nextgisweb/qgis/raster-editor-widget'
 
 
 def setup_pyramid(comp, config):
