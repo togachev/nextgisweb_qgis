@@ -353,9 +353,14 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         )
 
         mreq.add_layer(layer, style)
-
         res = mreq.render_image(extent, size)
-        return qgis_image_to_pil(res)
+
+        mapScale = (extent[2] - extent[0])/ size[0] / 0.00028
+        if type(style.scale_range()[0]) in ['int', 'float'] or type(style.scale_range()[1]) in ['int', 'float']:
+            if style.scale_range()[0] < mapScale or style.scale_range()[1] > mapScale:
+                return qgis_image_to_pil(mreq.render_image([0,0,0,0], (0,0)))
+        else:
+            return qgis_image_to_pil(res)
 
     def render_legend(self):
         env.qgis.qgis_init()
@@ -405,18 +410,15 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             for s in mreq.legend_symbols(0, (icon_size, icon_size))
         ]
 
-
 DataScope.read.require(
     ResourceScope.read, cls=QgisVectorStyle, attr="svg_marker_library", attr_empty=True
 )
-
 
 @on_data_change_feature_layer.connect
 def on_data_change_feature_layer(resource, geom):
     for child in resource.children:
         if isinstance(child, QgisVectorStyle):
             on_data_change_renderable.fire(child, geom)
-
 
 @implementer(IExtentRenderRequest, ITileRenderRequest)
 class RenderRequest:
