@@ -356,9 +356,10 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         res = mreq.render_image(extent, size)
 
         mapScale = (extent[2] - extent[0])/ size[0] / 0.00028
-        if type(style.scale_range()[0]) in ['int', 'float'] or type(style.scale_range()[1]) in ['int', 'float']:
-            if style.scale_range()[0] < mapScale or style.scale_range()[1] > mapScale:
-                return qgis_image_to_pil(mreq.render_image([0,0,0,0], (0,0)))
+        if isinstance(style.scale_range()[0], (int, float)) and style.scale_range()[0] < mapScale:
+            return None
+        elif isinstance(style.scale_range()[1], (int, float)) and style.scale_range()[1] > mapScale:
+            return None
         else:
             return qgis_image_to_pil(res)
 
