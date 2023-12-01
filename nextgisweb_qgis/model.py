@@ -336,31 +336,30 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         feature_query.fields(*qry_fields)
 
         features = list()
-        for feat in feature_query():
-            features.append(
-                (
-                    feat.id,
-                    feat.geom.wkb,
-                    tuple([convert(feat.fields[field]) for field, convert in cnv_fields]),
+        mapScale = (extent[2] - extent[0])/ size[0] / 0.00028
+
+        if isinstance(style.scale_range()[1], (int, float)) and style.scale_range()[1] > mapScale or isinstance(style.scale_range()[0], (int, float)) and style.scale_range()[0] < mapScale:
+            from PIL import Image
+            return Image.new("LA",(0,0))
+        else:
+            for feat in feature_query():
+                features.append(
+                    (
+                        feat.id,
+                        feat.geom.wkb,
+                        tuple([convert(feat.fields[field]) for field, convert in cnv_fields]),
+                    )
                 )
+
+            if len(features) == 0:
+                return None
+
+            layer = Layer.from_data(
+                _GEOM_TYPE_TO_QGIS[self.parent.geometry_type], crs, tuple(qhl_fields), tuple(features)
             )
 
-        if len(features) == 0:
-            return None
-
-        layer = Layer.from_data(
-            _GEOM_TYPE_TO_QGIS[self.parent.geometry_type], crs, tuple(qhl_fields), tuple(features)
-        )
-
-        mreq.add_layer(layer, style)
-        res = mreq.render_image(extent, size)
-
-        mapScale = (extent[2] - extent[0])/ size[0] / 0.00028
-        if isinstance(style.scale_range()[0], (int, float)) and style.scale_range()[0] < mapScale:
-            return None
-        elif isinstance(style.scale_range()[1], (int, float)) and style.scale_range()[1] > mapScale:
-            return None
-        else:
+            mreq.add_layer(layer, style)
+            res = mreq.render_image(extent, size)
             return qgis_image_to_pil(res)
 
     def render_legend(self):
