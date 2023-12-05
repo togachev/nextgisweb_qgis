@@ -338,14 +338,14 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         features = list()
 
         mapScale = (extent[2] - extent[0])/ size[0] / 0.00028
-        
+
         empty_layer = Layer.from_data(_GEOM_TYPE_TO_QGIS[self.parent.geometry_type], crs, (), ())
 
         if isinstance(style.scale_range()[1], (int, float)) and style.scale_range()[1] > mapScale:
-            layer = empty_layer
+            return None
 
         elif isinstance(style.scale_range()[0], (int, float)) and style.scale_range()[0] < mapScale:
-            layer = empty_layer
+            return None
 
         else:
             for feat in feature_query():
