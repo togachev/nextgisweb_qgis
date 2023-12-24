@@ -24,6 +24,7 @@ from nextgisweb.render import (
     IExtentRenderRequest,
     ILegendableStyle,
     ILegendSymbols,
+    IRenderableScaleRange,
     IRenderableStyle,
     ITileRenderRequest,
     LegendSymbol,
@@ -55,7 +56,7 @@ from qgis_headless import (
 )
 from qgis_headless.util import to_pil as qgis_image_to_pil
 
-from .util import rand_color
+from .util import rand_color, sld_to_qml_raster
 
 _GEOM_TYPE_TO_QGIS = {
     GEOM_TYPE.POINT: Layer.GT_POINT,
@@ -200,7 +201,7 @@ class QgisStyleMixin:
         self.qgis_fileobj = value
 
 
-@implementer(IRenderableStyle)
+@implementer(IRenderableStyle, IRenderableScaleRange)
 class QgisRasterStyle(Base, QgisStyleMixin, Resource):
     identity = "qgis_raster_style"
     cls_display_name = _("QGIS raster style")
@@ -217,17 +218,19 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
     def _render_image(self, srs, extent, size, cond=None, padding=0):
         extended, render_size, target_box = _render_bounds(extent, size, padding)
 
+        env.qgis.qgis_init()
+
+        style = read_style(self)
+        if not check_scale_range(style, extent, size, dpi=96):
+            return None
+
         # We need raster pyramids so use working directory filename
         # instead of original filename.
         gdal_path = env.raster_layer.workdir_filename(self.parent.fileobj)
 
-        env.qgis.qgis_init()
-
         mreq = MapRequest()
         mreq.set_dpi(96)
         mreq.set_crs(CRS.from_epsg(srs.id))
-
-        style = read_style(self)
 
         layer = Layer.from_gdal(gdal_path)
         mreq.add_layer(layer, style)
@@ -236,6 +239,10 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
         img = qgis_image_to_pil(res)
 
         return img
+
+    def scale_range(self):
+        env.qgis.qgis_init()
+        return read_style(self).scale_range()
 
 
 def path_resolver_factory(svg_marker_library):
@@ -263,7 +270,7 @@ def path_resolver_factory(svg_marker_library):
     return path_resolver
 
 
-@implementer((IRenderableStyle, ILegendableStyle, ILegendSymbols))
+@implementer(IRenderableStyle, ILegendableStyle, ILegendSymbols, IRenderableScaleRange)
 class QgisVectorStyle(Base, QgisStyleMixin, Resource):
     identity = "qgis_vector_style"
     cls_display_name = _("QGIS vector style")
@@ -294,6 +301,12 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
     def _render_image(self, srs, extent, size, cond, padding=0):
         extended, render_size, target_box = _render_bounds(extent, size, padding)
 
+        env.qgis.qgis_init()
+
+        style = read_style(self)
+        if not check_scale_range(style, extent, size, dpi=96):
+            return None
+
         feature_query = self.parent.feature_query()
 
         # Apply filter condition
@@ -306,15 +319,11 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         feature_query.intersects(bbox)
         feature_query.geom()
 
-        env.qgis.qgis_init()
-
         crs = CRS.from_epsg(srs.id)
 
         mreq = MapRequest()
         mreq.set_dpi(96)
         mreq.set_crs(crs)
-
-        style = read_style(self)
 
         style_attrs = style.used_attributes()
         if style_attrs is not None:
@@ -404,6 +413,10 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             LegendSymbol(display_name=s.title(), icon=qgis_image_to_pil(s.icon()))
             for s in mreq.legend_symbols(0, (icon_size, icon_size))
         ]
+
+    def scale_range(self):
+        env.qgis.qgis_init()
+        return read_style(self).scale_range()
 
 
 DataScope.read.require(
@@ -593,8 +606,13 @@ def read_style(qgis_style):
                 params["svg_resolver"] = path_resolver_factory(sml)
 
             if qgis_style.qgis_format == QgisStyleFormat.SLD:
-                params["format"] = StyleFormat.SLD
                 xml = qgis_style.qgis_sld.to_xml()
+                if isinstance(qgis_style, QgisRasterStyle):
+                    # We have to convert to QML until QGIS supports raster SLD import
+                    xml = sld_to_qml_raster(xml)
+                    params["format"] = StyleFormat.QML
+                else:
+                    params["format"] = StyleFormat.SLD
                 style = Style.from_string(xml, **params)
             else:
                 params["format"] = _FILE_FORMAT_2_HEADLESS[qgis_style.qgis_format]
@@ -605,6 +623,15 @@ def read_style(qgis_style):
         _style_cache[key] = style
 
     return style
+
+
+def check_scale_range(style, extent, size, *, dpi):
+    min_denom, max_denom = style.scale_range()
+    if min_denom is None and max_denom is None:
+        return True
+
+    denom = (extent[2] - extent[0]) * dpi / (size[0] * 0.0254)
+    return (min_denom is None or min_denom > denom) and (max_denom is None or max_denom < denom)
 
 
 def _convert_none(v):
