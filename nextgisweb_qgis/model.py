@@ -6,7 +6,7 @@ from os.path import sep as path_sep
 from shutil import copyfile
 from uuid import UUID
 from warnings import warn
-
+import inspect
 from cachetools import LRUCache
 from shapely.geometry import box
 from sqlalchemy.orm import declared_attr
@@ -17,7 +17,7 @@ from nextgisweb.lib import db
 from nextgisweb.lib.geometry import Geometry
 
 from nextgisweb.core.exception import OperationalError, ValidationError
-from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer, FeatureQueryParams, filter_feature_op
+from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer, FilterQueryParams, filter_feature_op
 from nextgisweb.feature_layer import on_data_change as on_data_change_feature_layer
 from nextgisweb.file_storage import FileObj
 from nextgisweb.render import (
@@ -271,7 +271,7 @@ def path_resolver_factory(svg_marker_library):
 
 
 @implementer(IRenderableStyle, ILegendableStyle, ILegendSymbols, IRenderableScaleRange)
-class QgisVectorStyle(Base, QgisStyleMixin, Resource, FeatureQueryParams):
+class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
     identity = "qgis_vector_style"
     cls_display_name = _("QGIS vector style")
 
@@ -309,9 +309,6 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FeatureQueryParams):
 
         feature_query = self.parent.feature_query()
 
-        if self.params_op:
-            filter_feature_op(feature_query, self.params_op, self.keys_op)
-
         # Apply filter condition
         if cond is not None:
             feature_query.filter_by(**cond)
@@ -346,6 +343,11 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FeatureQueryParams):
             qry_fields.append(fkeyname)
 
         feature_query.fields(*qry_fields)
+
+        # raise ValidationError(_(str(self.prop)))
+        if self.prop["param"]:
+            if self.prop["styleId"] == str(self.id):
+                filter_feature_op(feature_query, self.prop["param"], self.prop["keys"])
 
         features = list()
         for feat in feature_query():
