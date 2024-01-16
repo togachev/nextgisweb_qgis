@@ -6,7 +6,7 @@ from os.path import sep as path_sep
 from shutil import copyfile
 from uuid import UUID
 from warnings import warn
-import inspect
+
 from cachetools import LRUCache
 from shapely.geometry import box
 from sqlalchemy.orm import declared_attr
