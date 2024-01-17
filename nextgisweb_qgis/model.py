@@ -344,10 +344,10 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
 
         feature_query.fields(*qry_fields)
 
-        # raise ValidationError(_(str(self.prop)))
-        if self.prop["param"]:
-            if self.prop["styleId"] == str(self.id):
-                filter_feature_op(feature_query, self.prop["param"], self.prop["keys"])
+        p = self.get_prop()
+        if str(self.parent_id) in p:
+            f = p.get(str(self.parent_id))
+            filter_feature_op(feature_query, f["param"], f["keys"])
 
         features = list()
         for feat in feature_query():
