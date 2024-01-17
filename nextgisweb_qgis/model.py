@@ -307,7 +307,7 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
         p = self.get_prop()
         if str(self.parent_id) in p:
             f = p.get(str(self.parent_id))
-            filter_feature_op(feature_query, f["param"], f["keys"])
+            filter_feature_op(feature_query, f["param"], None)
 
         features = list()
         for feat in feature_query():
