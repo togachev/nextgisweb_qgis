@@ -279,6 +279,16 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
         feature_query.intersects(bbox)
         feature_query.geom()
 
+        p = self.get_prop()
+        if str(self.parent_id) in p:
+            f = p.get(str(self.parent_id))
+            filters = self.parent.feature_query()
+            filters.geom()
+            filter_feature_op(filters, f["param"], None)
+            features = [feature for feature in filters()]
+            if len(features) > 0:
+                feature_query = filters
+
         crs = CRS.from_epsg(srs.id)
 
         mreq = MapRequest()
@@ -303,11 +313,6 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
             qry_fields.append(fkeyname)
 
         feature_query.fields(*qry_fields)
-
-        p = self.get_prop()
-        if str(self.parent_id) in p:
-            f = p.get(str(self.parent_id))
-            filter_feature_op(feature_query, f["param"], None)
 
         features = list()
         for feat in feature_query():
