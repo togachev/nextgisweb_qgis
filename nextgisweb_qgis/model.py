@@ -17,7 +17,7 @@ from nextgisweb.lib import db
 from nextgisweb.lib.geometry import Geometry
 
 from nextgisweb.core.exception import OperationalError, ValidationError
-from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer
+from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer, FilterQueryParams, filter_feature_op
 from nextgisweb.feature_layer import on_data_change as on_data_change_feature_layer
 from nextgisweb.file_storage import FileObj
 from nextgisweb.render import (
@@ -231,7 +231,7 @@ def path_resolver_factory(svg_marker_library):
 
 
 @implementer(IRenderableStyle, ILegendableStyle, ILegendSymbols, IRenderableScaleRange)
-class QgisVectorStyle(Base, QgisStyleMixin, Resource):
+class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
     identity = "qgis_vector_style"
     cls_display_name = _("QGIS vector style")
 
@@ -278,6 +278,16 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         bbox = Geometry.from_shape(box(*extended), srid=srs.id)
         feature_query.intersects(bbox)
         feature_query.geom()
+
+        p = self.get_prop()
+        if str(self.parent_id) in p:
+            f = p.get(str(self.parent_id))
+            filters = self.parent.feature_query()
+            filters.geom()
+            filter_feature_op(filters, f["param"], None)
+            features = [feature for feature in filters()]
+            if len(features) > 0:
+                feature_query = filters
 
         crs = CRS.from_epsg(srs.id)
 
