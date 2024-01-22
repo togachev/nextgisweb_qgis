@@ -280,14 +280,17 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
         feature_query.geom()
 
         p = self.get_prop()
-        if str(self.parent_id) in p:
-            f = p.get(str(self.parent_id))
-            filters = self.parent.feature_query()
-            filters.geom()
-            filter_feature_op(filters, f["param"], None)
-            features = [feature for feature in filters()]
-            if len(features) > 0:
-                feature_query = filters
+        res_id = str(self.parent_id)
+        if res_id in p:
+            f = p.get(res_id)
+            if f:
+                filters = self.parent.feature_query()
+                filters.geom()
+                if "param" in f:
+                    filter_feature_op(filters, f["param"], None)
+                features = [feature for feature in filters()]
+                if len(features) > 0:
+                    feature_query = filters
 
         crs = CRS.from_epsg(srs.id)
 
