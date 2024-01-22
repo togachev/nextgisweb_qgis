@@ -283,11 +283,10 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
         res_id = str(self.parent_id)
         if res_id in p:
             f = p.get(res_id)
-            if f:
+            if f and "param" in f:
                 filters = self.parent.feature_query()
                 filters.geom()
-                if "param" in f:
-                    filter_feature_op(filters, f["param"], None)
+                filter_feature_op(filters, f["param"], None)
                 features = [feature for feature in filters()]
                 if len(features) > 0:
                     feature_query = filters
