@@ -280,20 +280,19 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
         feature_query.intersects(bbox)
         feature_query.geom()
         
-        p = self.get_prop()
+        params = self.get_prop()
         session_prop = self.get_prop_session()
-        res_id = str(self.parent_id)
-        if "ngw_sid" in session_prop:
-            if session_prop["ngw_sid"] in p.keys():
-                ngw_sid = session_prop["ngw_sid"]
-                f = p.get(ngw_sid)[res_id]
-                if f and "param" in f:
-                    filters = self.parent.feature_query()
-                    filters.geom()
-                    filter_feature_op(filters, f["param"], None)
-                    features = [feature for feature in filters()]
-                    if len(features) > 0:
-                        feature_query = filters
+        
+        if session_prop and session_prop['ngw_sid'] and params:
+            key = str(self.parent_id) + "_" + session_prop['ngw_sid']
+            if key in params:
+                f = params[key]
+                filters = self.parent.feature_query()
+                filters.geom()
+                filter_feature_op(filters, f["param"], None)
+                features = [feature for feature in filters()]
+                if len(features) > 0:
+                    feature_query = filters
 
         crs = CRS.from_epsg(srs.id)
 
