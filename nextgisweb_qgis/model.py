@@ -37,6 +37,7 @@ from nextgisweb.resource import (
     Resource,
     ResourceScope,
     Serializer,
+    SessionResources,
 )
 from nextgisweb.resource import SerializedProperty as SP
 from nextgisweb.resource import SerializedResourceRelationship as SRR
@@ -231,7 +232,7 @@ def path_resolver_factory(svg_marker_library):
 
 
 @implementer(IRenderableStyle, ILegendableStyle, ILegendSymbols, IRenderableScaleRange)
-class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
+class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, SessionResources):
     identity = "qgis_vector_style"
     cls_display_name = _("QGIS vector style")
 
@@ -278,6 +279,20 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams):
         bbox = Geometry.from_shape(box(*extended), srid=srs.id)
         feature_query.intersects(bbox)
         feature_query.geom()
+        
+        params = self.get_prop()
+        session_prop = self.get_prop_session()
+        raise ValidationError(_(str(params)))
+        if session_prop and session_prop['ngw_sid'] and params:
+            key = str(self.parent_id) + "_" + session_prop['ngw_sid']
+            if key in params:
+                f = params[key]
+                filters = self.parent.feature_query()
+                filters.geom()
+                filter_feature_op(filters, f["param"], None)
+                features = [feature for feature in filters()]
+                if len(features) > 0:
+                    feature_query = filters
 
         p = self.get_prop()
         if str(self.parent_id) in p:
