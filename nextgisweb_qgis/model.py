@@ -282,7 +282,6 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
         
         params = self.get_prop()
         session_prop = self.get_prop_session()
-        raise ValidationError(_(str(params)))
         if session_prop and session_prop['ngw_sid'] and params:
             key = str(self.parent_id) + "_" + session_prop['ngw_sid']
             if key in params:
