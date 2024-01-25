@@ -272,7 +272,25 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
 
         # Apply filter condition
         if cond is not None:
-            feature_query.filter_by(**cond)
+            f = cond.get(str(self.parent_id))
+            if f:
+                filter_ = []
+                for param, value in f.items():
+                    if param.startswith("fld_"):
+                        fld_expr = re.sub("^fld_", "", param)
+                    elif param == "id" or param.startswith("id__"):
+                        fld_expr = param
+                    else:
+                        continue
+
+                    try:
+                        key, operator = fld_expr.rsplit("__", 1)
+                    except ValueError:
+                        key, operator = (fld_expr, "eq")
+
+                    filter_.append((key, operator, value))
+
+                feature_query.filter(*filter_)
 
         feature_query.srs(srs)
 
@@ -280,28 +298,18 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
         feature_query.intersects(bbox)
         feature_query.geom()
         
-        params = self.get_prop()
-        session_prop = self.get_prop_session()
-        if session_prop and session_prop['ngw_sid'] and params:
-            key = str(self.parent_id) + "_" + session_prop['ngw_sid']
-            if key in params:
-                f = params[key]
-                filters = self.parent.feature_query()
-                filters.geom()
-                filter_feature_op(filters, f["param"], None)
-                features = [feature for feature in filters()]
-                if len(features) > 0:
-                    feature_query = filters
-
-        p = self.get_prop()
-        if str(self.parent_id) in p:
-            f = p.get(str(self.parent_id))
-            filters = self.parent.feature_query()
-            filters.geom()
-            filter_feature_op(filters, f["param"], None)
-            features = [feature for feature in filters()]
-            if len(features) > 0:
-                feature_query = filters
+        # params = self.get_prop()
+        # session_prop = self.get_prop_session()
+        # if session_prop and session_prop['ngw_sid'] and params:
+        #     key = str(self.parent_id) + "_" + session_prop['ngw_sid']
+        #     if key in params:
+        #         f = params[key]
+        #         filters = self.parent.feature_query()
+        #         filters.geom()
+        #         filter_feature_op(filters, f["param"], None)
+        #         features = [feature for feature in filters()]
+        #         if len(features) > 0:
+        #             feature_query = filters
 
         crs = CRS.from_epsg(srs.id)
 
@@ -417,7 +425,7 @@ def on_data_change_feature_layer(resource, geom):
 
 @implementer(IExtentRenderRequest, ITileRenderRequest)
 class RenderRequest:
-    def __init__(self, style, srs, cond=None):
+    def __init__(self, style, srs, cond):
         self.style = style
         self.srs = srs
         self.cond = cond
