@@ -5,7 +5,6 @@ from os.path import normpath
 from os.path import sep as path_sep
 from shutil import copyfile
 from uuid import UUID
-from warnings import warn
 
 from cachetools import LRUCache
 from shapely.geometry import box
@@ -245,7 +244,7 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
         cascade="save-update, merge",
         # Backref is just for cleaning up QgisVectorStyle -> SVGMarkerLibrary
         # reference. SQLAlchemy does this automatically.
-        backref=db.backref("_backref_qgis_vector_style"),
+        backref=db.backref("_backref_qgis_vector_style", cascade_backrefs=False),
     )
 
     @classmethod
