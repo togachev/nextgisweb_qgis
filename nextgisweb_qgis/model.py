@@ -15,7 +15,7 @@ from nextgisweb.lib import db
 from nextgisweb.lib.geometry import Geometry
 
 from nextgisweb.core.exception import OperationalError, ValidationError
-from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer, FilterQueryParams, filter_feature_op
+from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer
 from nextgisweb.feature_layer import on_data_change as on_data_change_feature_layer
 from nextgisweb.file_storage import FileObj
 from nextgisweb.file_upload import FileUpload
@@ -36,7 +36,6 @@ from nextgisweb.resource import (
     Resource,
     ResourceScope,
     Serializer,
-    SessionResources,
 )
 from nextgisweb.resource import SerializedProperty as SP
 from nextgisweb.resource import SerializedResourceRelationship as SRR
@@ -229,7 +228,7 @@ def path_resolver_factory(svg_marker_library):
 
 
 @implementer(IRenderableStyle, ILegendableStyle, ILegendSymbols, IRenderableScaleRange)
-class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, SessionResources):
+class QgisVectorStyle(Base, QgisStyleMixin, Resource):
     identity = "qgis_vector_style"
     cls_display_name = _("QGIS vector style")
 
@@ -269,44 +268,13 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource, FilterQueryParams, Session
 
         # Apply filter condition
         if cond is not None:
-            f = cond.get(str(self.parent_id))
-            if f:
-                filter_ = []
-                for param, value in f.items():
-                    if param.startswith("fld_"):
-                        fld_expr = re.sub("^fld_", "", param)
-                    elif param == "id" or param.startswith("id__"):
-                        fld_expr = param
-                    else:
-                        continue
-
-                    try:
-                        key, operator = fld_expr.rsplit("__", 1)
-                    except ValueError:
-                        key, operator = (fld_expr, "eq")
-
-                    filter_.append((key, operator, value))
-
-                feature_query.filter(*filter_)
+            feature_query.filter_by(**cond)
 
         feature_query.srs(srs)
 
         bbox = Geometry.from_shape(box(*extended), srid=srs.id)
         feature_query.intersects(bbox)
         feature_query.geom()
-        
-        # params = self.get_prop()
-        # session_prop = self.get_prop_session()
-        # if session_prop and session_prop['ngw_sid'] and params:
-        #     key = str(self.parent_id) + "_" + session_prop['ngw_sid']
-        #     if key in params:
-        #         f = params[key]
-        #         filters = self.parent.feature_query()
-        #         filters.geom()
-        #         filter_feature_op(filters, f["param"], None)
-        #         features = [feature for feature in filters()]
-        #         if len(features) > 0:
-        #             feature_query = filters
 
         crs = CRS.from_epsg(srs.id)
 
