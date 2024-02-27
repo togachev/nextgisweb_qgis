@@ -2,10 +2,11 @@ import { makeAutoObservable, toJS } from "mobx";
 
 import type { GeometryType } from "@nextgisweb/feature-layer/type";
 import type { FileMeta } from "@nextgisweb/file-upload/file-uploader/type";
+import type { Composite } from "@nextgisweb/resource/type/Composite";
 import type {
     EditorStoreOptions as EditorStoreOptionsBase,
     EditorStore as IEditorStore,
-    Operations,
+    Operation,
 } from "@nextgisweb/resource/type/EditorStore";
 import type { Style } from "@nextgisweb/sld/style-editor/type/Style";
 
@@ -17,10 +18,6 @@ interface Value {
 }
 
 export type Mode = "file" | "sld" | "default";
-
-interface Composite {
-    parent: number;
-}
 
 interface EditorStoreOptions extends EditorStoreOptionsBase {
     geometryType: GeometryType;
@@ -35,7 +32,7 @@ export class EditorStore implements IEditorStore<Value> {
     uploading = false;
     sld: Style | null = null;
 
-    operation?: Operations;
+    operation?: Operation;
     composite: Composite;
     geometryType: GeometryType;
 
