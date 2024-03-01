@@ -390,7 +390,7 @@ def on_data_change_feature_layer(resource, geom):
 
 @implementer(IExtentRenderRequest, ITileRenderRequest)
 class RenderRequest:
-    def __init__(self, style, srs, cond):
+    def __init__(self, style, srs, cond=None):
         self.style = style
         self.srs = srs
         self.cond = cond
