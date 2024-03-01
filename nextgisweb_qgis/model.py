@@ -197,9 +197,9 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
 
         return img
 
-    # def scale_range(self):
-    #     env.qgis.qgis_init()
-    #     return read_style(self).scale_range()
+    def scale_range(self):
+        env.qgis.qgis_init()
+        return read_style(self).scale_range()
 
 
 def path_resolver_factory(svg_marker_library):
@@ -371,9 +371,9 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             for s in mreq.legend_symbols(0, (icon_size, icon_size))
         ]
 
-    # def scale_range(self):
-    #     env.qgis.qgis_init()
-    #     return read_style(self).scale_range()
+    def scale_range(self):
+        env.qgis.qgis_init()
+        return read_style(self).scale_range()
 
 
 DataScope.read.require(
@@ -579,13 +579,13 @@ def read_style(qgis_style):
     return style
 
 
-# def check_scale_range(style, extent, size, *, dpi):
-#     min_denom, max_denom = style.scale_range()
-#     if min_denom is None and max_denom is None:
-#         return True
+def check_scale_range(style, extent, size, *, dpi):
+    min_denom, max_denom = style.scale_range()
+    if min_denom is None and max_denom is None:
+        return True
 
-#     denom = (extent[2] - extent[0]) * dpi / (size[0] * 0.0254)
-#     return (min_denom is None or min_denom > denom) and (max_denom is None or max_denom < denom)
+    denom = (extent[2] - extent[0]) * dpi / (size[0] * 0.0254)
+    return (min_denom is None or min_denom > denom) and (max_denom is None or max_denom < denom)
 
 
 def _convert_none(v):
