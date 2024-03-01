@@ -178,8 +178,8 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
         env.qgis.qgis_init()
 
         style = read_style(self)
-        if not check_scale_range(style, extent, size, dpi=96):
-            return None
+        # if not check_scale_range(style, extent, size, dpi=96):
+        #     return None
 
         # We need raster pyramids so use working directory filename
         # instead of original filename.
