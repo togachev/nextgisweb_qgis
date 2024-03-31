@@ -10,11 +10,11 @@ from shapely.geometry import box
 from sqlalchemy.orm import declared_attr
 from zope.interface import implementer
 
-from nextgisweb.env import Base, _, env
+from nextgisweb.env import Base, DBSession, _, env
 from nextgisweb.lib import db
 from nextgisweb.lib.geometry import Geometry
 
-from nextgisweb.core.exception import OperationalError, ValidationError
+from nextgisweb.core.exception import InsufficientPermissions, OperationalError, ValidationError
 from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer
 from nextgisweb.feature_layer import on_data_change as on_data_change_feature_layer
 from nextgisweb.file_storage import FileObj
@@ -123,7 +123,7 @@ class QgisStyleMixin:
 
     @declared_attr
     def qgis_fileobj(cls):
-        return db.relationship(FileObj, cascade="all")
+        return db.relationship(FileObj, cascade="save-update, merge")
 
     @declared_attr
     def qgis_sld_id(cls):
@@ -169,12 +169,10 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
     def check_parent(cls, parent):
         return parent.cls == "raster_layer"
 
-    def render_request(self, srs):
+    def render_request(self, srs, cond=None):
         return RenderRequest(self, srs)
 
-    def _render_image(self, srs, extent, size, cond=None, padding=0):
-        extended, render_size, target_box = _render_bounds(extent, size, padding)
-
+    def _render_image(self, srs, extent, size):
         env.qgis.qgis_init()
 
         style = read_style(self)
@@ -200,6 +198,12 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
     def scale_range(self):
         env.qgis.qgis_init()
         return read_style(self).scale_range()
+
+    def _headless_kwargs(self):
+        return dict(
+            format=_FILE_FORMAT_2_HEADLESS[self.qgis_format],
+            layer_type=LT_RASTER,
+        )
 
 
 def path_resolver_factory(svg_marker_library):
@@ -255,7 +259,7 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
     def render_request(self, srs, cond=None):
         return RenderRequest(self, srs, cond)
 
-    def _render_image(self, srs, extent, size, cond, padding=0):
+    def _render_image(self, srs, extent, size, *, symbols=None, padding=0):
         extended, render_size, target_box = _render_bounds(extent, size, padding)
 
         env.qgis.qgis_init()
@@ -265,11 +269,6 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             return None
 
         feature_query = self.parent.feature_query()
-
-        # Apply filter condition
-        if cond is not None:
-            feature_query.filter_by(**cond)
-
         feature_query.srs(srs)
 
         bbox = Geometry.from_shape(box(*extended), srid=srs.id)
@@ -318,9 +317,12 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             _GEOM_TYPE_TO_QGIS[self.parent.geometry_type], crs, tuple(qhl_fields), tuple(features)
         )
 
-        mreq.add_layer(layer, style)
+        idx = mreq.add_layer(layer, style)
 
-        res = mreq.render_image(extent, size)
+        render_params = dict()
+        if symbols is not None:
+            render_params["symbols"] = ((idx, symbols),)
+        res = mreq.render_image(extent, size, **render_params)
         return qgis_image_to_pil(res)
 
     def render_legend(self):
@@ -367,7 +369,12 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         mreq.add_layer(layer, style)
 
         return [
-            LegendSymbol(display_name=s.title(), icon=qgis_image_to_pil(s.icon()))
+            LegendSymbol(
+                index=s.index(),
+                render=s.render(),
+                display_name=s.title(),
+                icon=qgis_image_to_pil(s.icon()),
+            )
             for s in mreq.legend_symbols(0, (icon_size, icon_size))
         ]
 
@@ -375,9 +382,21 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
         env.qgis.qgis_init()
         return read_style(self).scale_range()
 
+    def _headless_kwargs(self):
+        return dict(
+            format=_FILE_FORMAT_2_HEADLESS[self.qgis_format],
+            layer_type=LT_VECTOR,
+            layer_geometry_type=_GEOM_TYPE_TO_QGIS[self.parent.geometry_type],
+        )
 
+
+DataScope.read.require(DataScope.read, attr="parent", cls=QgisRasterStyle)
+DataScope.read.require(DataScope.read, attr="parent", cls=QgisVectorStyle)
 DataScope.read.require(
-    ResourceScope.read, cls=QgisVectorStyle, attr="svg_marker_library", attr_empty=True
+    ResourceScope.read,
+    attr="svg_marker_library",
+    attr_empty=True,
+    cls=QgisVectorStyle,
 )
 
 
@@ -393,20 +412,24 @@ class RenderRequest:
     def __init__(self, style, srs, cond=None):
         self.style = style
         self.srs = srs
-        self.cond = cond
+        self.params = dict()
+        if isinstance(style, QgisVectorStyle):
+            if cond is not None and "symbols" in cond:
+                self.params["symbols"] = tuple(cond["symbols"])
 
     def render_extent(self, extent, size):
         try:
-            return self.style._render_image(self.srs, extent, size, self.cond)
+            return self.style._render_image(self.srs, extent, size, **self.params)
         except Exception as exc:
             _reraise_qgis_exception(exc, OperationalError)
 
     def render_tile(self, tile, size):
         extent = self.srs.tile_extent(tile)
+        params = dict(self.params)
+        if isinstance(self.style, QgisVectorStyle):
+            params["padding"] = size / 2
         try:
-            return self.style._render_image(
-                self.srs, extent, (size, size), self.cond, padding=size / 2
-            )
+            return self.style._render_image(self.srs, extent, (size, size), **params)
         except Exception as exc:
             _reraise_qgis_exception(exc, OperationalError)
 
@@ -439,7 +462,9 @@ class _sld_attr(SP):
     def setter(self, srlzr, value):
         if srlzr.obj.qgis_format != QgisStyleFormat.SLD:
             raise ValidationError(message=_("Style format mismatch."))
-        srlzr.obj.qgis_sld = SLD(value=value)
+        sld = SLD()
+        sld.deserialize(value)
+        srlzr.obj.qgis_sld = sld
         srlzr.obj.qgis_fileobj = None
 
 
@@ -454,10 +479,8 @@ class _file_upload_attr(SP):
         fupload = FileUpload(id=value["id"])
         srcfile = str(fupload.data_path)
 
-        params = dict()
-
         if srlzr.obj.qgis_format in _FILE_FORMAT_2_HEADLESS:
-            params["format"] = _FILE_FORMAT_2_HEADLESS[srlzr.obj.qgis_format]
+            pass  # Already set in format attribute
         elif srlzr.obj.qgis_format is None:
             for fmt in (StyleFormat.QML, StyleFormat.SLD):
                 try:
@@ -465,7 +488,6 @@ class _file_upload_attr(SP):
                 except StyleValidationError:
                     pass
                 else:
-                    params["format"] = fmt
                     srlzr.obj.qgis_format = _HEADLESS_2_FILE_FORMAT[fmt]
                     break
             else:
@@ -473,17 +495,8 @@ class _file_upload_attr(SP):
         else:
             raise ValidationError(message=_("Style format mismatch."))
 
-        layer = srlzr.obj.parent
-        if IFeatureLayer.providedBy(layer):
-            params["layer_type"] = LT_VECTOR
-            gt = layer.geometry_type
-            gt_qgis = _GEOM_TYPE_TO_QGIS[gt]
-            params["layer_geometry_type"] = gt_qgis
-        else:
-            params["layer_type"] = LT_RASTER
-
         try:
-            Style.from_file(srcfile, **params)
+            Style.from_file(srcfile, **srlzr.obj._headless_kwargs())
         except Exception as exc:
             _reraise_qgis_exception(exc, ValidationError)
 
@@ -493,6 +506,27 @@ class _file_upload_attr(SP):
         on_style_change.fire(srlzr.obj)
 
 
+class _copy_from(SP):
+    def setter(self, srlzr, value):
+        with DBSession.no_autoflush:
+            style = srlzr.resclass.filter_by(id=value["id"]).one()
+            if not style.has_permission(ResourceScope.read, srlzr.user):
+                raise InsufficientPermissions()  # TODO: Add more details
+            for attr in ("qgis_format", "qgis_fileobj", "qgis_sld", "svg_marker_library"):
+                if hasattr(style, attr):
+                    setattr(srlzr.obj, attr, getattr(style, attr))
+
+            if (fobj := srlzr.obj.qgis_fileobj) is not None:
+                env.qgis.qgis_init()
+                try:
+                    Style.from_file(
+                        str(fobj.filename()),
+                        **srlzr.obj._headless_kwargs(),
+                    )
+                except Exception as exc:
+                    _reraise_qgis_exception(exc, ValidationError)
+
+
 class QgisVectorStyleSerializer(Serializer):
     identity = QgisVectorStyle.identity
     resclass = QgisVectorStyle
@@ -500,16 +534,18 @@ class QgisVectorStyleSerializer(Serializer):
     format = _format_attr(read=ResourceScope.read, write=ResourceScope.update)
     sld = _sld_attr(read=ResourceScope.read, write=ResourceScope.update)
     file_upload = _file_upload_attr(read=None, write=ResourceScope.update)
-    svg_marker_library = SRR(read=DataStructureScope.read, write=DataStructureScope.write)
+    svg_marker_library = SRR(read=ResourceScope.read, write=ResourceScope.update)
+    copy_from = _copy_from(read=None, write=ResourceScope.update)
 
 
-class QgisRasterSerializer(Serializer):
+class QgisRasterStyleSerializer(Serializer):
     identity = QgisRasterStyle.identity
     resclass = QgisRasterStyle
 
     format = _format_attr(read=ResourceScope.read, write=ResourceScope.update)
     sld = _sld_attr(read=ResourceScope.read, write=ResourceScope.update)
     file_upload = _file_upload_attr(read=None, write=ResourceScope.update)
+    copy_from = _copy_from(read=None, write=ResourceScope.update)
 
 
 _style_cache = LRUCache(maxsize=256)

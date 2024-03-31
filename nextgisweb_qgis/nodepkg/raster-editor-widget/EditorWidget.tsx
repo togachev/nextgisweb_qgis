@@ -8,6 +8,8 @@ import type {
     EditorWidgetProps,
 } from "@nextgisweb/resource/type";
 
+import { CopyFromComponent } from "../CopyFromComponent";
+
 import type { EditorStore, Mode } from "./EditorStore";
 import { FileModeComponent } from "./component/FileModeComponent";
 import { SldModeComponent } from "./component/SldModeComponent";
@@ -28,6 +30,7 @@ export const EditorWidget: EditorWidgetComponent<
             { value: "file", label: gettext("Style from file") },
             { value: "sld", label: gettext("User-defined style") },
             { value: "default", label: gettext("Default style") },
+            { value: "copy", label: gettext("Copy from resource") },
         ];
         return result;
     }, []);
@@ -38,6 +41,10 @@ export const EditorWidget: EditorWidgetComponent<
                 return <FileModeComponent store={store} />;
             case "sld":
                 return <SldModeComponent store={store} />;
+            case "copy":
+                return (
+                    <CopyFromComponent store={store} cls="qgis_raster_style" />
+                );
             default:
                 <>Default</>;
         }
