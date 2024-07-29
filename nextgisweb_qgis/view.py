@@ -47,7 +47,8 @@ def setup_pyramid(comp, config):
 
     @resource_sections(priority=40)
     def resource_section_default_style(obj):
-        if comp.options["default_style"] and len(obj.children) == 0:
-            for cls in (QgisVectorStyle, QgisRasterStyle):
-                if cls.check_parent(obj):
-                    return dict(cls=cls.identity)
+        if obj.cls != 'tablenogeom_layer':
+            if comp.options["default_style"] and len(obj.children) == 0:
+                for cls in (QgisVectorStyle, QgisRasterStyle):
+                    if cls.check_parent(obj):
+                        return dict(cls=cls.identity)
