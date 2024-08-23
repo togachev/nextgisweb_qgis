@@ -45,3 +45,5 @@ export const FileModeComponent = observer(
         );
     }
 );
+
+FileModeComponent.displayName = "FileModeComponent";
