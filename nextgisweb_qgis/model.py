@@ -350,7 +350,7 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
     def render_request(self, srs, cond=None):
         return RenderRequest(self, srs, cond)
 
-    def _render_image(self, srs, extent, size, *, symbols=None, padding=0):
+    def _render_image(self, srs, extent, size, cond, *, symbols=None, padding=0):
         extended, render_size, target_box = _render_bounds(extent, size, padding)
 
         env.qgis.qgis_init()
@@ -360,6 +360,11 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             return None
 
         feature_query = self.parent.feature_query()
+        
+        # Apply filter condition
+        if cond is not None:
+            feature_query.filter(*cond)
+
         feature_query.srs(srs)
 
         bbox = Geometry.from_shape(box(*extended), srid=srs.id)
@@ -496,6 +501,7 @@ class RenderRequest:
     def __init__(self, style, srs, cond=None):
         self.style = style
         self.srs = srs
+        self.cond = cond
         self.params = dict()
         if isinstance(style, QgisVectorStyle):
             if cond is not None and "symbols" in cond:
@@ -503,7 +509,7 @@ class RenderRequest:
 
     def render_extent(self, extent, size):
         try:
-            return self.style._render_image(self.srs, extent, size, **self.params)
+            return self.style._render_image(self.srs, extent, size, self.cond, **self.params)
         except Exception as exc:
             _reraise_qgis_exception(exc, OperationalError)
 
@@ -513,7 +519,7 @@ class RenderRequest:
         if isinstance(self.style, QgisVectorStyle):
             params["padding"] = size / 2
         try:
-            return self.style._render_image(self.srs, extent, (size, size), **params)
+            return self.style._render_image(self.srs, extent, (size, size), self.cond, **params)
         except Exception as exc:
             _reraise_qgis_exception(exc, OperationalError)
 
