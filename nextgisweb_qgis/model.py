@@ -9,7 +9,7 @@ from uuid import UUID
 import sqlalchemy as sa
 import sqlalchemy.orm as orm
 from cachetools import LRUCache
-from msgspec import UNSET, UnsetType
+from msgspec import UNSET, Struct, UnsetType
 from shapely.geometry import box
 from sqlalchemy.orm import declared_attr
 from zope.interface import implementer
@@ -17,6 +17,7 @@ from zope.interface import implementer
 from nextgisweb.env import Base, env, gettext
 from nextgisweb.lib import saext
 from nextgisweb.lib.geometry import Geometry
+from nextgisweb.lib.saext import Msgspec
 
 from nextgisweb.core.exception import InsufficientPermissions, OperationalError, ValidationError
 from nextgisweb.feature_layer import FIELD_TYPE, GEOM_TYPE, IFeatureLayer
@@ -115,6 +116,11 @@ def _render_bounds(extent, size, padding):
     return extended, render_size, target_box
 
 
+class ScaleRangeCache(Struct, array_like=True):
+    min_scale_denom: Union[float, None]
+    max_scale_denom: Union[float, None]
+
+
 class QgisStyleMixin:
     @declared_attr
     def qgis_format(cls):
@@ -138,6 +144,10 @@ class QgisStyleMixin:
     def qgis_sld(cls):
         return orm.relationship(SLD, cascade="save-update, merge")
 
+    @declared_attr
+    def qgis_scale_range_cache(cls):
+        return sa.Column(Msgspec(ScaleRangeCache), nullable=True)
+
     @property
     def srs(self):
         return self.parent.srs
@@ -146,6 +156,17 @@ class QgisStyleMixin:
         self.qgis_format = format_
         self.qgis_fileobj = FileObj().copy_from(filename)
         return self
+
+    def _update_scale_range_cache(self):
+        env.qgis.qgis_init()
+        sr = read_style(self).scale_range()
+        self.qgis_scale_range_cache = ScaleRangeCache(*sr)
+
+    def scale_range(self):
+        if self.qgis_scale_range_cache is None:
+            self._update_scale_range_cache()
+        c = self.qgis_scale_range_cache
+        return (c.min_scale_denom, c.max_scale_denom)
 
     __table_args__ = (
         sa.CheckConstraint(
@@ -283,10 +304,6 @@ class QgisRasterStyle(Base, QgisStyleMixin, Resource):
                 )
             )
         return result
-
-    def scale_range(self):
-        env.qgis.qgis_init()
-        return read_style(self).scale_range()
 
     def _headless_kwargs(self):
         return dict(
@@ -469,10 +486,6 @@ class QgisVectorStyle(Base, QgisStyleMixin, Resource):
             for s in mreq.legend_symbols(0, (icon_size, icon_size))
         ]
 
-    def scale_range(self):
-        env.qgis.qgis_init()
-        return read_style(self).scale_range()
-
     def _headless_kwargs(self):
         return dict(
             format=_FILE_FORMAT_2_HEADLESS[self.qgis_format],
@@ -518,7 +531,7 @@ class RenderRequest:
             _reraise_qgis_exception(exc, OperationalError)
 
 
-class FormatAttr(SAttribute, apitype=True):
+class FormatAttr(SAttribute):
     def get(self, srlzr: Serializer) -> QgisStyleFormat:
         return srlzr.obj.qgis_format
 
@@ -535,7 +548,7 @@ class FormatAttr(SAttribute, apitype=True):
         srlzr.obj.qgis_format = value
 
 
-class SldAttr(SAttribute, apitype=True):
+class SldAttr(SAttribute):
     def get(self, srlzr: Serializer) -> Union[SLDStyle, UnsetType]:
         if srlzr.obj.qgis_format == QgisStyleFormat.SLD:
             return srlzr.obj.qgis_sld.value
@@ -552,7 +565,7 @@ class SldAttr(SAttribute, apitype=True):
         srlzr.obj.qgis_fileobj = None
 
 
-class FileUploadAttr(SAttribute, apitype=True):
+class FileUploadAttr(SAttribute):
     def get(self, srlzr: Serializer) -> UnsetType:
         return UNSET
 
@@ -590,7 +603,7 @@ class FileUploadAttr(SAttribute, apitype=True):
         srlzr.obj.qgis_sld = None
 
 
-class CopyFromAttr(SAttribute, apitype=True):
+class CopyFromAttr(SAttribute):
     def get(self, srlzr: Serializer) -> UnsetType:
         return UNSET
 
@@ -640,7 +653,7 @@ def read_style(qgis_style):
         if qgis_style.qgis_format == QgisStyleFormat.SLD:
             uuid = UUID(int=qgis_style.qgis_sld_id, version=4).hex
         else:
-            uuid = qgis_style.qgis_fileobj.uuid
+            uuid = UUID(int=2**127 + qgis_style.qgis_fileobj_id, version=4).hex
 
         if isinstance(qgis_style, QgisVectorStyle):
             sml = qgis_style.svg_marker_library
@@ -694,6 +707,20 @@ def read_style(qgis_style):
         _style_cache[key] = style
 
     return style
+
+
+def _update_scale_range_cache_event(mapper, connection, qgis_style):
+    attrs_state = sa.inspect(qgis_style).attrs
+    for attr in ("qgis_format", "qgis_fileobj_id", "qgis_sld_id"):
+        history = getattr(attrs_state, attr).load_history()
+        if history.has_changes():
+            qgis_style._update_scale_range_cache()
+            return
+
+
+for cls in (QgisRasterStyle, QgisVectorStyle):
+    for event in ("before_insert", "before_update"):
+        sa.event.listens_for(cls, event)(_update_scale_range_cache_event)
 
 
 def check_scale_range(style, extent, size, *, dpi):
