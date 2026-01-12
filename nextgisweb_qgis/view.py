@@ -1,4 +1,4 @@
-from nextgisweb.env import env, gettext
+from nextgisweb.env import DBSession, env, gettext
 from nextgisweb.lib import dynmenu as dm
 
 from nextgisweb.jsrealm import jsentry
@@ -45,9 +45,10 @@ def resource_section_default_style(obj, *, request, **kwargs):
             if not cls.check_parent(obj):
                 continue
 
+        with DBSession.no_autoflush:
             child = cls(parent=obj, owner_user=request.user)
             display_name = child.suggest_display_name(request.localizer.translate)
-            obj.children.remove(child)
+            child.parent = None
 
             return dict(
                 payload=dict(
