@@ -35,7 +35,7 @@ class RasterStyleWidget(Widget):
 
 @resource_sections("@nextgisweb/qgis/resource-section/default-style", order=-60)
 def resource_section_default_style(obj, *, request, **kwargs):
-    if obj.cls != 'tablenogeom_layer':
+    if obj.cls != "tablenogeom_layer":
         if not env.qgis.options["default_style"] or any(
             child.cls.endswith("_style") for child in obj.children
         ):
@@ -45,20 +45,20 @@ def resource_section_default_style(obj, *, request, **kwargs):
             if not cls.check_parent(obj):
                 continue
 
-        with DBSession.no_autoflush:
-            child = cls(parent=obj, owner_user=request.user)
-            display_name = child.suggest_display_name(request.localizer.translate)
-            child.parent = None
+            with DBSession.no_autoflush:
+                child = cls(parent=obj, owner_user=request.user)
+                display_name = child.suggest_display_name(request.localizer.translate)
+                child.parent = None
 
-            return dict(
-                payload=dict(
-                    resource=dict(
-                        cls=cls.identity,
-                        parent=dict(id=obj.id),
-                        display_name=display_name,
+                return dict(
+                    payload=dict(
+                        resource=dict(
+                            cls=cls.identity,
+                            parent=dict(id=obj.id),
+                            display_name=display_name,
+                        )
                     )
                 )
-            )
 
 def setup_pyramid(comp, config):
     @Resource.__dynmenu__.add
