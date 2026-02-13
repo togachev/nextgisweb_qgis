@@ -14,6 +14,9 @@ const msgSvgMarkerLibrary = gettext("SVG marker library");
 
 export const FileModeComponent: EditorWidget<EditorStore> = observer(
     ({ store }) => {
+        const resourceGroupId =
+            store.composite?.initialValue?.resource.parent?.parent.id;
+
         return (
             <>
                 <FileUploader
@@ -38,6 +41,7 @@ export const FileModeComponent: EditorWidget<EditorStore> = observer(
                     pickerOptions={{
                         traverseClasses: ["resource_group"],
                         requireClass: "svg_marker_library",
+                        initParentId: resourceGroupId,
                         hideUnavailable: true,
                     }}
                     allowClear
