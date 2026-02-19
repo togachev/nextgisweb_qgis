@@ -1,8 +1,11 @@
 import { observer } from "mobx-react-lite";
+import { useEffect, useState } from "react";
 
 import { FileUploader } from "@nextgisweb/file-upload/file-uploader";
 import { assert } from "@nextgisweb/jsrealm/error";
+import { useRoute } from "@nextgisweb/pyramid/hook";
 import { gettext } from "@nextgisweb/pyramid/i18n";
+import { resourceAttrItems } from "@nextgisweb/resource/api/resource-attr";
 import { ResourceSelect } from "@nextgisweb/resource/component/resource-select";
 import type { EditorWidget } from "@nextgisweb/resource/type";
 
@@ -14,8 +17,29 @@ const msgSvgMarkerLibrary = gettext("SVG marker library");
 
 export const FileModeComponent: EditorWidget<EditorStore> = observer(
     ({ store }) => {
-        const resourceGroupId =
-            store.composite?.initialValue?.resource.parent?.parent.id;
+        const [parentGroup, setParentGroup] = useState<number | undefined>(
+            undefined
+        );
+        const resourceGroupId = store.composite?.parent;
+
+        const { route } = useRoute("resource.attr");
+
+        useEffect(() => {
+            if (resourceGroupId !== undefined && resourceGroupId !== null) {
+                const loadAttrItem = async () => {
+                    const attrItems = await resourceAttrItems({
+                        route,
+                        resources: [resourceGroupId],
+                        attributes: [["resource.parent"]],
+                    });
+                    const parent = attrItems[0].get("resource.parent");
+                    if (parent) {
+                        setParentGroup(parent.id);
+                    }
+                };
+                loadAttrItem();
+            }
+        }, [resourceGroupId, route]);
 
         return (
             <>
@@ -41,7 +65,7 @@ export const FileModeComponent: EditorWidget<EditorStore> = observer(
                     pickerOptions={{
                         traverseClasses: ["resource_group"],
                         requireClass: "svg_marker_library",
-                        initParentId: resourceGroupId,
+                        initParentId: parentGroup,
                         hideUnavailable: true,
                     }}
                     allowClear
